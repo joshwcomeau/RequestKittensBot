@@ -1,0 +1,17 @@
+{
+  "name": "requestkittensbot",
+  "version": "1.0.0",
+  "description": "A bot for cat pictures!",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Joshua Comeau",
+  "license": "MIT",
+  "dependencies": {
+    "envar": "^1.0.0",
+    "node-twitter": "^0.5.2",
+    "node-twitterbot": "^0.2.2",
+    "twitter": "^1.2.5"
+  }
+}
