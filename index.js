@@ -14,18 +14,13 @@ var client = new twitter({
 function replyToUser(username) {
   var newStatus = "Hi " + username + "!";
   client.post('statuses/update', {status: newStatus}, function(error, tweet, response){
-    if(error) {
-      console.log(util.inspect(error));
-      throw error;
-    }
-    console.log("Tweet posted: ", tweet);
-    console.log("Raw response object: ", response);
+    console.log( error ? util.inspect(error) : "Tweet posted: ", tweet, "Raw response object: ", response);
   });
 };
 
 
 
-client.stream('user', {track:'requestkittens'}, function(stream) {
+client.stream('statuses/filter', {track:'requestkittens'}, function(stream) {
   var msg, sender;
   
   stream.on('data', function(data) {
