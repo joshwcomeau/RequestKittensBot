@@ -11,10 +11,19 @@ var client = new twitter({
 });
 
 
-function replyToUser(username) {
-  var newStatus = "Hi " + username + "!";
-  client.post('statuses/update', {status: newStatus}, function(error, tweet, response){
-    console.log( error ? util.inspect(error) : "Tweet posted: ", tweet, "Raw response object: ", response);
+function replyToUser(tweetId, user) {
+  var newStatus, responseObj;
+
+  newStatus   = "@" + user.screen_name + ", here you go!";
+  responseObj = {
+    status:                newStatus, 
+    in_reply_to_status_id: tweetId
+  };
+
+  console.log("\n\n\n\n\nPosting with responseObj", responseObj);
+
+  client.post('statuses/update', responseObj, function(error, tweet, response){
+    console.log( error ? util.inspect(error) : "\n\n\n\n\nTweet posted: ", tweet);
   });
 };
 
@@ -28,15 +37,60 @@ client.stream('statuses/filter', {track:'requestkittens'}, function(stream) {
 
     // Is this a message sent to us? Might also be generic user data.
     if ( data.text && data.user.screen_name) {
-      msg = data.text;
-      sender = data.user.screen_name;
+      // Version 1: just reply "Hi ______!"
+      replyToUser(data.id_str, data.user);
     }
-    
-    // Version 1: just reply "Hi ______!"
-    replyToUser(sender);
   });
 
   stream.on('error', function(error) {
     console.log(error);
   });
 });
+
+
+/* 
+Sample User object (Twitter API)
+
+{ 
+  id: 3181045951,
+  id_str: '3181045951',
+  name: 'Request Kittens',
+  screen_name: 'requestkittens',
+  location: '',
+  description: '',
+  url: null,
+  entities: { description: [Object] },
+  protected: false,
+  followers_count: 1,
+  friends_count: 1,
+  listed_count: 0,
+  created_at: 'Thu Apr 30 21:28:59 +0000 2015',
+  favourites_count: 0,
+  utc_offset: -14400,
+  time_zone: 'Eastern Time (US & Canada)',
+  geo_enabled: false,
+  verified: false,
+  statuses_count: 3,
+  lang: 'en',
+  contributors_enabled: false,
+  is_translator: false,
+  is_translation_enabled: false,
+  profile_background_color: 'C0DEED',
+  profile_background_image_url: 'http://abs.twimg.com/images/themes/theme1/bg.png',
+  profile_background_image_url_https: 'https://abs.twimg.com/images/themes/theme1/bg.png',
+  profile_background_tile: false,
+  profile_image_url: 'http://pbs.twimg.com/profile_images/593891297443840000/p9IdFN0V_normal.jpg',
+  profile_image_url_https: 'https://pbs.twimg.com/profile_images/593891297443840000/p9IdFN0V_normal.jpg',
+  profile_link_color: '0084B4',
+  profile_sidebar_border_color: 'C0DEED',
+  profile_sidebar_fill_color: 'DDEEF6',
+  profile_text_color: '333333',
+  profile_use_background_image: true,
+  default_profile: true,
+  default_profile_image: false,
+  following: false,
+  follow_request_sent: false,
+  notifications: false 
+}
+
+*/
