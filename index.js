@@ -1,6 +1,7 @@
 var twitter = require('twitter');
 var util    = require('util');
 var envar   = require('envar');
+var _       = require('lodash');
 
 
 var client = new twitter({
@@ -11,7 +12,7 @@ var client = new twitter({
 });
 
 
-function replyToUser(tweetId, user) {
+function replyToUser(tweetId, user, photoData) {
   var newStatus, responseObj;
 
   newStatus   = "@" + user.screen_name + ", here you go!";
@@ -20,25 +21,38 @@ function replyToUser(tweetId, user) {
     in_reply_to_status_id: tweetId
   };
 
-  console.log("\n\n\n\n\nPosting with responseObj", responseObj);
 
   client.post('statuses/update', responseObj, function(error, tweet, response){
     console.log( error ? util.inspect(error) : "\n\n\n\n\nTweet posted: ", tweet);
   });
 };
 
+function findDesiredEmotion(tweetBody) {
+
+}
+
+function getCatPhoto(emotion) {
+  
+}
 
 
 client.stream('statuses/filter', {track:'requestkittens'}, function(stream) {
-  var msg, sender;
+  var msg, sender, emotion, photoData;
   
   stream.on('data', function(data) {
     console.log("Data received:", data);
 
     // Is this a message sent to us? Might also be generic user data.
     if ( data.text && data.user.screen_name) {
-      // Version 1: just reply "Hi ______!"
-      replyToUser(data.id_str, data.user);
+      // Step 1: Parse their message to find the desired emotion
+      emotion = findDesiredEmotion(data.text);
+
+      // Step 2: Make a request to requestkittens.com to get a photo
+      // Ideally, this will return a long string of binary data
+      photoData = getCatPhoto(emotion);
+
+      // Step 3: Tweet the photo to user
+      replyToUser(data.id_str, data.user, photoData);
     }
   });
 
