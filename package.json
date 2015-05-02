@@ -10,8 +10,6 @@
   "license": "MIT",
   "dependencies": {
     "envar": "^1.0.0",
-    "node-twitter": "^0.5.2",
-    "node-twitterbot": "^0.2.2",
     "twitter": "^1.2.5"
   }
 }
