@@ -2,6 +2,10 @@ var twitter = require('twitter');
 var util    = require('util');
 var envar   = require('envar');
 var _       = require('lodash');
+var Promise = require('es6-promise').Promise;
+var request = require('request');
+
+var API_INDEX = 'http://requestkittens.com/cats';
 
 
 var client = new twitter({
@@ -13,26 +17,67 @@ var client = new twitter({
 
 
 function replyToUser(tweetId, user, photoData) {
-  var newStatus, responseObj;
-
-  newStatus   = "@" + user.screen_name + ", here you go!";
-  responseObj = {
-    status:                newStatus, 
-    in_reply_to_status_id: tweetId
-  };
-
-
-  client.post('statuses/update', responseObj, function(error, tweet, response){
-    console.log( error ? util.inspect(error) : "\n\n\n\n\nTweet posted: ", tweet);
+  return new Promise(function(resolve, reject) {
+    resolve("Success");
   });
+
+  // var newStatus, responseObj;
+
+  // newStatus   = "@" + user.screen_name + ", here you go!";
+  // responseObj = {
+  //   status:                newStatus, 
+  //   in_reply_to_status_id: tweetId
+  // };
+
+
+  // client.post('statuses/update', responseObj, function(error, tweet, response){
+  //   console.log( error ? util.inspect(error) : "\n\n\n\n\nTweet posted: ", tweet);
+  // });
 };
 
 function findDesiredEmotion(tweetBody) {
-
+  // Fake it for now, out of laziness.
+  return "sleepy";
 }
 
 function getCatPhoto(emotion) {
-  
+  return new Promise(function(resolve, reject) {
+    request.get(API_INDEX, {
+      qs: {
+        emotion: emotion
+      },
+      headers: {
+        Authorization: envar("REQUESTKITTENS_API_KEY")
+      }
+    }, function(err, res, body) {
+      console.log("Body from API is", body);
+      (err || res.statusCode !== 200) ? reject(err) : resolve(body);
+    });
+  });
+}
+
+function readFileContents(catData) {
+  return new Promise(function(resolve, reject) {
+    // logic here with fs to open and read data asynchronously.
+    // or synchronously? Does it matter?
+
+    resolve()
+  });
+}
+
+function tweetUser(data) {
+  // Step 1: Parse their message to find the desired emotion
+  emotion = findDesiredEmotion(data.text);
+
+  // Step 2: Make a request to requestkittens.com to get a photo
+  getCatPhoto(emotion)
+  .then(function(catData) { return readFileContents(catData); })
+  .then(function(photoData) { return replyToUser(data.id_str, data.user, photoData); })
+  .then(function(result) {
+    console.log("Everything complete!", result);
+  }, function(err) {
+    console.log("Something broke:", err);
+  });
 }
 
 
@@ -44,15 +89,7 @@ client.stream('statuses/filter', {track:'requestkittens'}, function(stream) {
 
     // Is this a message sent to us? Might also be generic user data.
     if ( data.text && data.user.screen_name) {
-      // Step 1: Parse their message to find the desired emotion
-      emotion = findDesiredEmotion(data.text);
-
-      // Step 2: Make a request to requestkittens.com to get a photo
-      // Ideally, this will return a long string of binary data
-      photoData = getCatPhoto(emotion);
-
-      // Step 3: Tweet the photo to user
-      replyToUser(data.id_str, data.user, photoData);
+      tweetUser(data);
     }
   });
 
@@ -60,6 +97,21 @@ client.stream('statuses/filter', {track:'requestkittens'}, function(stream) {
     console.log(error);
   });
 });
+
+
+// JUST A TEST: Skipping the original twitter stream bit for now.
+var sampleData = {
+  id_str: "123456789",
+  text: "@RequestKittens, can I have a Happy kitten please??",
+  user: {
+    screen_name: 'JoshuaWComeau',
+    id_str: '3181045951',
+  }
+}
+
+tweetUser(sampleData);
+
+
 
 
 /* 
