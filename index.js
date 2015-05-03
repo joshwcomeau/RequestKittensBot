@@ -66,36 +66,46 @@ function getCatPhoto(emotion) {
   });
 }
 
-function uploadPhotoToTwitter(photoData) {
+function uploadPhotoToTwitter(filename) {
   return new Promise(function(resolve, reject) {
-    client.post(
-      'media/upload', 
-      { 
-        media: photoData,
-        headers: {
-          'Content-Type': 'application/octet-stream'
-        }
-      }, 
-      function(err, media, response){
-        console.log("err:", err);
-        console.log("media:", media);
-        console.log("response:", response);
-        reject(err);
+    fs.readFile(filename, function(err, photoData) {
+      if (err) return reject(err);
+      
+      client.post(
+        'media/upload', 
+        { 
+          media: photoData
+        }, 
+        function(err, media, response){
+          console.log("err:", err);
+          console.log("media:", media);
+          console.log("response:", response);
+          reject(err);
 
-      }
-    );
+        }
+      );
+
+
+    })
   });
 }
 
 function fetchPhoto(catData) {
   return new Promise(function(resolve, reject) {
+    var filename = 'tempfile.jpg';
+
     request.get(
       { 
         url: catData.url, 
         json: true 
       }, 
       function(err, res, body) {
-        (err || res.statusCode !== 200) ? reject(err) : resolve(body);
+        if (err || res.statusCode !== 200) return reject(err);
+
+        fs.writeFile(filename, body, function(err) {
+          if (err) return reject(err);
+          resolve(filename);
+        });
       }
     );
   });
@@ -107,7 +117,7 @@ function tweetUser(data) {
 
   getCatPhoto(emotion)
   .then(function(catData)   { return fetchPhoto(catData); })
-  .then(function(photoData) { return uploadPhotoToTwitter(photoData); })
+  .then(function(filename)  { return uploadPhotoToTwitter(filename); })
   .then(function(mediaId)   { return replyToUser(data.id_str, data.user, photoData); })
   .then(function(result)    {
     console.log("Everything complete!", result);
