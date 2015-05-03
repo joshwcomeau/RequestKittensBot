@@ -21,32 +21,30 @@ var client = new twitter({
 });
 
 
-function replyToUser(tweetId, user, photoData) {
-  return new Promise(function(resolve, reject) {
-    var newStatus, responseObj;
+// Putting this first, as a table-of-contents. Yay hoisting!
+function tweetUser(data) {
+  emotion = findDesiredEmotion(data.text);
 
-    newStatus   = "@" + user.screen_name + ", here you go!";
-    responseObj = {
-      status:                newStatus, 
-      in_reply_to_status_id: tweetId
-    };
-
-
-    client.post('statuses/update', responseObj, function(error, tweet, response){
-      console.log( error ? util.inspect(error) : "\n\n\n\n\nTweet posted: ", tweet);
-    });
-
-
+  getCatDataFromAPI(emotion)
+  .then(function(catData)   { return fetchPhoto(catData); })
+  .then(function(photoData) { return uploadPhotoToTwitter(photoData); })
+  .then(function(mediaId)   { return replyToUser(mediaId, data.id_str, data.user, emotion); })
+  .then(function(result)    {
+    console.log("Everything complete!", result);
+  }, function(err) {
+    console.log("Something broke:", err);
   });
+}
 
-};
-
+// Step 1: Figure out which emotion they want.
 function findDesiredEmotion(tweetBody) {
   // Fake it for now, out of laziness.
   return "sleepy";
 }
 
-function getCatPhoto(emotion) {
+
+// Step 2: Make a request to the RequestKittens.com API for a Cat JSON object.
+function getCatDataFromAPI(emotion) {
   return new Promise(function(resolve, reject) {
     request.get(
       API_INDEX,
@@ -67,26 +65,8 @@ function getCatPhoto(emotion) {
   });
 }
 
-function uploadPhotoToTwitter(photoData) {
-  return new Promise(function(resolve, reject) {
-    client.post(
-      'media/upload', 
-      { 
-        media_data: photoData
-      }, 
-      function(err, media, response){
-        console.log("err:", err);
-        // console.log("media:", media);
-        console.log("Response:", response);
 
-        // console.log("\n\n\n\n\n binaryData:", photoData.substr(0,100));
-        reject(err);
-
-      }
-    );
-  });
-}
-
+// Step 3: Download and parse the actual photo.
 function fetchPhoto(catData) {
   var base64data;
 
@@ -100,15 +80,7 @@ function fetchPhoto(catData) {
       function(err, res, body) {
         if (err || res.statusCode !== 200) reject(err);
 
-
         base64data = new Buffer(body.toString(), 'binary').toString('base64');
-        // base64data = "data:image/jpeg;base64," + base64data;
-
-
-
-        // Lets write this to a file to test if it works in an HTML docuent.
-        fs.writeFileSync("testfile3.txt", base64data);
-
         resolve(base64data);
       }
     );
@@ -116,19 +88,48 @@ function fetchPhoto(catData) {
 }
 
 
-function tweetUser(data) {
-  emotion = findDesiredEmotion(data.text);
-
-  getCatPhoto(emotion)
-  .then(function(catData)   { return fetchPhoto(catData); })
-  .then(function(photoData) { return uploadPhotoToTwitter(photoData); })
-  .then(function(mediaId)   { return replyToUser(data.id_str, data.user, photoData); })
-  .then(function(result)    {
-    console.log("Everything complete!", result);
-  }, function(err) {
-    console.log("Something broke:", err);
+// Step 4: Upload that photo to Twitter, pass on its MediaID for the reply.
+function uploadPhotoToTwitter(photoData) {
+  return new Promise(function(resolve, reject) {
+    client.post(
+      'media/upload', 
+      { 
+        media_data: photoData
+      }, 
+      function(err, media, response){
+        err ? reject(err) : resolve(JSON.parse(response.body).media_id_string);
+      }
+    );
   });
 }
+
+
+// Step 5: Take all the data we've accrued, and use it to build and send a reply to the user.
+function replyToUser(mediaId, tweetId, user, emotion) {
+  return new Promise(function(resolve, reject) {
+    var newStatus, responseObj;
+
+    newStatus   = "@" + user.screen_name + ", here's the " + emotion + " cat photo you requested!";
+
+    responseObj = {
+      status:                 newStatus, 
+      media_ids:              mediaId,
+      in_reply_to_status_id:  tweetId,
+    };
+
+
+    client.post('statuses/update', responseObj, function(error, tweet, response){
+      console.log( error ? util.inspect(error) : "\n\n\n\n\nTweet posted: ", tweet);
+    });
+  });
+};
+
+
+
+
+
+
+
 
 
 client.stream('statuses/filter', {track:'requestkittens'}, function(stream) {
@@ -149,24 +150,28 @@ client.stream('statuses/filter', {track:'requestkittens'}, function(stream) {
 });
 
 
+//////////////// TEST 1: SKIP EVERYTHING BEFORE TweetUser ///////////////
 // JUST A TEST: Skipping the original twitter stream bit for now.
-var sampleData = {
-  id_str: "594625609063620608",
-  text: "@RequestKittens, can I have a Happy kitten please??",
-  user: {
-    screen_name: 'JoshuaWComeau',
-    id_str: '3181045951',
-  }
-}
+// var sampleData = {
+//   id_str: "594625609063620608",
+//   text: "@RequestKittens, can I have a Happy kitten please??",
+//   user: {
+//     screen_name: 'JoshuaWComeau',
+//     id_str: '3181045951',
+//   }
+// }
 
-tweetUser(sampleData);
+// tweetUser(sampleData);
+/////////////////////////////////////////////////////////////////////////
 
 
+
+/////////////// TEST 2: SKIP EVERYTHING EXCEPT uploadPhoto //////////////
 // A test: Upload a local file to twitter
 // data = fs.readFileSync('testfile.txt');
 // fs.writeFileSync("testfile2.txt", data);
 // uploadPhotoToTwitter(data);
-
+////////////////////////////////////////////////////////////////////////
 
 
 /* 
