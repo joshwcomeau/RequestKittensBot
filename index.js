@@ -60,52 +60,57 @@ function getCatPhoto(emotion) {
         json: true
       }, 
       function(err, res, body) {
+        console.log("Got cat photo? status:", res.statusCode);
         (err || res.statusCode !== 200) ? reject(err) : resolve(body._items[0]);
       }
     );
   });
 }
 
-function uploadPhotoToTwitter(filename) {
+function uploadPhotoToTwitter(photoData) {
   return new Promise(function(resolve, reject) {
-    fs.readFile(filename, function(err, photoData) {
-      if (err) return reject(err);
-      
-      client.post(
-        'media/upload', 
-        { 
-          media: photoData
-        }, 
-        function(err, media, response){
-          console.log("err:", err);
-          console.log("media:", media);
-          console.log("response:", response);
-          reject(err);
+    client.post(
+      'media/upload', 
+      { 
+        media_data: photoData
+      }, 
+      function(err, media, response){
+        console.log("err:", err);
+        // console.log("media:", media);
+        console.log("response:", response);
 
-        }
-      );
+        // console.log("\n\n\n\n\n binaryData:", photoData.substr(0,100));
+        reject(err);
 
-
-    })
+      }
+    );
   });
 }
 
 function fetchPhoto(catData) {
-  return new Promise(function(resolve, reject) {
-    var filename = 'tempfile.jpg';
+  var binaryData;
 
+  return new Promise(function(resolve, reject) {
     request.get(
       { 
         url: catData.url, 
         json: true 
       }, 
       function(err, res, body) {
-        if (err || res.statusCode !== 200) return reject(err);
+        if (err || res.statusCode !== 200) reject(err);
 
-        fs.writeFile(filename, body, function(err) {
-          if (err) return reject(err);
-          resolve(filename);
-        });
+        console.log("About to base64");
+        binaryData = new Buffer(body, 'binary').toString('binary');
+        // binaryData = "data:image/jpeg;base64," + binaryData;
+
+        console.log("Binary data is", binaryData.substr(0,100));
+
+
+
+        // Lets write this to a file to test if it works in an HTML docuent.
+        fs.writeFileSync("testfile.txt", binaryData);
+
+        resolve(binaryData);
       }
     );
   });
@@ -117,7 +122,7 @@ function tweetUser(data) {
 
   getCatPhoto(emotion)
   .then(function(catData)   { return fetchPhoto(catData); })
-  .then(function(filename)  { return uploadPhotoToTwitter(filename); })
+  .then(function(photoData) { return uploadPhotoToTwitter(photoData); })
   .then(function(mediaId)   { return replyToUser(data.id_str, data.user, photoData); })
   .then(function(result)    {
     console.log("Everything complete!", result);
@@ -155,9 +160,12 @@ var sampleData = {
   }
 }
 
-tweetUser(sampleData);
+// tweetUser(sampleData);
 
 
+// A test: Upload a local file to twitter
+data = fs.readFileSync('josh.jpg', { encoding: 'base64' });
+uploadPhotoToTwitter(data);
 
 
 /* 
