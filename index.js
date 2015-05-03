@@ -1,9 +1,14 @@
-var twitter = require('twitter');
-var util    = require('util');
-var envar   = require('envar');
-var _       = require('lodash');
-var Promise = require('es6-promise').Promise;
-var request = require('request');
+// Built-in Node modules
+var util      = require('util');
+var fs        = require('fs');
+
+// NPM package modules
+var _         = require('lodash');
+var envar     = require('envar');
+var twitter   = require('twitter');
+var Promise   = require('es6-promise').Promise;
+var request   = require('request');
+
 
 var API_INDEX = 'http://requestkittens.com/cats';
 
@@ -18,21 +23,22 @@ var client = new twitter({
 
 function replyToUser(tweetId, user, photoData) {
   return new Promise(function(resolve, reject) {
-    resolve("Success");
+    var newStatus, responseObj;
+
+    newStatus   = "@" + user.screen_name + ", here you go!";
+    responseObj = {
+      status:                newStatus, 
+      in_reply_to_status_id: tweetId
+    };
+
+
+    client.post('statuses/update', responseObj, function(error, tweet, response){
+      console.log( error ? util.inspect(error) : "\n\n\n\n\nTweet posted: ", tweet);
+    });
+
+
   });
 
-  // var newStatus, responseObj;
-
-  // newStatus   = "@" + user.screen_name + ", here you go!";
-  // responseObj = {
-  //   status:                newStatus, 
-  //   in_reply_to_status_id: tweetId
-  // };
-
-
-  // client.post('statuses/update', responseObj, function(error, tweet, response){
-  //   console.log( error ? util.inspect(error) : "\n\n\n\n\nTweet posted: ", tweet);
-  // });
 };
 
 function findDesiredEmotion(tweetBody) {
@@ -42,38 +48,68 @@ function findDesiredEmotion(tweetBody) {
 
 function getCatPhoto(emotion) {
   return new Promise(function(resolve, reject) {
-    request.get(API_INDEX, {
-      qs: {
-        emotion: emotion
-      },
-      headers: {
-        Authorization: envar("REQUESTKITTENS_API_KEY")
+    request.get(
+      API_INDEX,
+      {
+        qs: {
+          emotion: emotion
+        },
+        headers: {
+          Authorization: envar("REQUESTKITTENS_API_KEY")
+        },
+        json: true
+      }, 
+      function(err, res, body) {
+        (err || res.statusCode !== 200) ? reject(err) : resolve(body._items[0]);
       }
-    }, function(err, res, body) {
-      console.log("Body from API is", body);
-      (err || res.statusCode !== 200) ? reject(err) : resolve(body);
-    });
+    );
   });
 }
 
-function readFileContents(catData) {
+function uploadPhotoToTwitter(photoData) {
   return new Promise(function(resolve, reject) {
-    // logic here with fs to open and read data asynchronously.
-    // or synchronously? Does it matter?
+    client.post(
+      'media/upload', 
+      { 
+        media: photoData,
+        headers: {
+          'Content-Type': 'application/octet-stream'
+        }
+      }, 
+      function(err, media, response){
+        console.log("err:", err);
+        console.log("media:", media);
+        console.log("response:", response);
+        reject(err);
 
-    resolve()
+      }
+    );
   });
 }
+
+function fetchPhoto(catData) {
+  return new Promise(function(resolve, reject) {
+    request.get(
+      { 
+        url: catData.url, 
+        json: true 
+      }, 
+      function(err, res, body) {
+        (err || res.statusCode !== 200) ? reject(err) : resolve(body);
+      }
+    );
+  });
+}
+
 
 function tweetUser(data) {
-  // Step 1: Parse their message to find the desired emotion
   emotion = findDesiredEmotion(data.text);
 
-  // Step 2: Make a request to requestkittens.com to get a photo
   getCatPhoto(emotion)
-  .then(function(catData) { return readFileContents(catData); })
-  .then(function(photoData) { return replyToUser(data.id_str, data.user, photoData); })
-  .then(function(result) {
+  .then(function(catData)   { return fetchPhoto(catData); })
+  .then(function(photoData) { return uploadPhotoToTwitter(photoData); })
+  .then(function(mediaId)   { return replyToUser(data.id_str, data.user, photoData); })
+  .then(function(result)    {
     console.log("Everything complete!", result);
   }, function(err) {
     console.log("Something broke:", err);
@@ -101,7 +137,7 @@ client.stream('statuses/filter', {track:'requestkittens'}, function(stream) {
 
 // JUST A TEST: Skipping the original twitter stream bit for now.
 var sampleData = {
-  id_str: "123456789",
+  id_str: "594625609063620608",
   text: "@RequestKittens, can I have a Happy kitten please??",
   user: {
     screen_name: 'JoshuaWComeau',
