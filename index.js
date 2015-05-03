@@ -77,7 +77,7 @@ function uploadPhotoToTwitter(photoData) {
       function(err, media, response){
         console.log("err:", err);
         // console.log("media:", media);
-        console.log("response:", response);
+        console.log("Response:", response);
 
         // console.log("\n\n\n\n\n binaryData:", photoData.substr(0,100));
         reject(err);
@@ -88,29 +88,28 @@ function uploadPhotoToTwitter(photoData) {
 }
 
 function fetchPhoto(catData) {
-  var binaryData;
+  var base64data;
 
   return new Promise(function(resolve, reject) {
     request.get(
       { 
         url: catData.url, 
+        encoding: 'binary',
         json: true 
       }, 
       function(err, res, body) {
         if (err || res.statusCode !== 200) reject(err);
 
-        console.log("About to base64");
-        binaryData = new Buffer(body, 'binary').toString('binary');
-        // binaryData = "data:image/jpeg;base64," + binaryData;
 
-        console.log("Binary data is", binaryData.substr(0,100));
+        base64data = new Buffer(body.toString(), 'binary').toString('base64');
+        // base64data = "data:image/jpeg;base64," + base64data;
 
 
 
         // Lets write this to a file to test if it works in an HTML docuent.
-        fs.writeFileSync("testfile.txt", binaryData);
+        fs.writeFileSync("testfile3.txt", base64data);
 
-        resolve(binaryData);
+        resolve(base64data);
       }
     );
   });
@@ -160,12 +159,14 @@ var sampleData = {
   }
 }
 
-// tweetUser(sampleData);
+tweetUser(sampleData);
 
 
 // A test: Upload a local file to twitter
-data = fs.readFileSync('josh.jpg', { encoding: 'base64' });
-uploadPhotoToTwitter(data);
+// data = fs.readFileSync('testfile.txt');
+// fs.writeFileSync("testfile2.txt", data);
+// uploadPhotoToTwitter(data);
+
 
 
 /* 
