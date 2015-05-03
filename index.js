@@ -9,7 +9,7 @@ var twitter   = require('twitter');
 var Promise   = require('es6-promise').Promise;
 var request   = require('request');
 
-
+var BOT_USERNAME  = "requestkittens"; 
 var API_ENDPOINTS = {
   cats: {
     index: 'http://requestkittens.com/cats'
@@ -32,34 +32,58 @@ var client = new twitter({
 
 // Putting this first, as a table-of-contents. Yay hoisting!
 function tweetUser(data) {
-  // First thing's first: Ignore tweets that the bot sends, to avoid a recursive loop.
-  if (data.user.screen_name.match(/requestkittens/i) ) return false;
+  var emotion;
 
-  emotion = findDesiredEmotion(data.text);
-
-  getCatDataFromAPI(emotion)
+  findDesiredEmotion(data.text)
+  .then(function(e)         { emotion = e; return getCatDataFromAPI(emotion); })
   .then(function(catData)   { return fetchPhoto(catData); })
   .then(function(photoData) { return uploadPhotoToTwitter(photoData); })
   .then(function(mediaId)   { return replyToUser(mediaId, data.id_str, data.user, emotion); })
   .then(function(result)    {
     console.log("Everything complete!", result);
   }, function(err) {
-    console.log("Something broke:", err);
+    if (err.type === "no_emotion_found") {
+      replyWithNoEmotionFound(data.id_str, data.user);
+    } else {
+      console.log("Something broke:", err);  
+    }
+    
+  });
+}
+
+function replyWithNoEmotionFound(tweetId, user) {
+  var newStatus;
+
+  newStatus   = "@" 
+              + user.screen_name 
+              + ", please use one of the emotions I recognize: \n\n" 
+              + validEmotions.join(", ") 
+              + ".";
+
+  responseObj = {
+    status:                 newStatus, 
+    in_reply_to_status_id:  tweetId,
+  };
+
+
+  client.post('statuses/update', responseObj, function(error, tweet, response){
+    console.log( error ? util.inspect(error) : "\n\n\n\n\nTweet posted: ", tweet);
   });
 }
 
 // Step 1: Figure out which emotion they want.
 function findDesiredEmotion(tweetBody) {
-  // Do we have a list of valid emotions? If not, go fetch one from the API.
-  if ( !validEmotions ) {
-    populateValidEmotions()
-    .then(function() {
+  return new Promise(function(resolve, reject) {
+    var word = _.find(tweetBody.split(" "), function(word) {
+      // Our server only deals in all-lowercase emotions.
+      // Let's ensure the tweet follows the same convention
+      word = word.toLowerCase();
+      return validEmotions.indexOf(word) !== -1;
+    });  
 
-    })
-  }
-  return _.find(tweetBody.split(" "), function(word) {
-    return 
+    word ? resolve(word) : reject({ type: "no_emotion_found" });
   });
+  
 }
 
 
@@ -144,7 +168,9 @@ function replyToUser(mediaId, tweetId, user, emotion) {
   });
 };
 
-function populateValidEmotions() {
+
+// Called on initialization to populate a list of valid emotions.
+function fetchValidEmotions() {
   return new Promise(function(resolve, reject) {
     request.get(
       API_ENDPOINTS.emotions.index,
@@ -155,39 +181,54 @@ function populateValidEmotions() {
         json: true
       }, 
       function(err, res, body) {
-        if (err || res.statusCode !== 200) return reject(err);
+        if ( err )                    return reject(err);
+        if ( res.statusCode !== 200 ) return reject("Server returned non-200 status:", res, body);
+        if ( !body._items.length )    return reject("Server doesn't have any emotions", body);
 
-        validEmotions = body._items.map(function(item) { return item.name; });
-        console.log(validEmotions);
-        validEmotions.length ? resolve(true) : reject("No emotions found from server");
+        return resolve(body._items.map(function(item) { return item.name; }));
       }
     );
   });
 }
 
 
+function initialize() {
+  fetchValidEmotions()
+  .then(function(emotions) {
+    validEmotions = emotions;
 
-populateValidEmotions();
+    // Start listening for tweets!
+    listenForTweets();
+
+  }, function(err) {
+    console.log("Problem fetching emotions:", err)
+  });
+}
 
 
 
-client.stream('statuses/filter', {track:'requestkittens'}, function(stream) {
-  var msg, sender, emotion, photoData;
-  
-  stream.on('data', function(data) {
-    console.log("Data received:", data);
+function listenForTweets() {
+  client.stream('statuses/filter', {track:'requestkittens'}, function(stream) {
+    var msg, sender, emotion, photoData;
+    
+    stream.on('data', function(data) {
+      console.log("Data received:", data);
 
-    // Is this a message sent to us? Might also be generic user data.
-    if ( data.text && data.user.screen_name) {
-      tweetUser(data);
-    }
+      // Is this a message sent to us? Might also be generic user data, or our own tweet.
+      if ( data.text && data.user.screen_name && data.user.screen_name !== BOT_USERNAME) {
+        tweetUser(data);
+      }
+    });
+
+    stream.on('error', function(error) {
+      console.log(error);
+    });
   });
 
-  stream.on('error', function(error) {
-    console.log(error);
-  });
-});
+}
 
+
+initialize();
 
 //////////////// TEST 1: Use this sample data ///////////.///////////////
 // JUST A TEST: Skipping the original twitter stream bit for now.
