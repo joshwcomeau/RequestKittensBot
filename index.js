@@ -10,7 +10,16 @@ var Promise   = require('es6-promise').Promise;
 var request   = require('request');
 
 
-var API_INDEX = 'http://requestkittens.com/cats';
+var API_ENDPOINTS = {
+  cats: {
+    index: 'http://requestkittens.com/cats'
+  },
+  emotions: {
+    index: 'http://requestkittens.com/emotions'
+  }
+};
+
+var validEmotions;
 
 
 var client = new twitter({
@@ -23,6 +32,9 @@ var client = new twitter({
 
 // Putting this first, as a table-of-contents. Yay hoisting!
 function tweetUser(data) {
+  // First thing's first: Ignore tweets that the bot sends, to avoid a recursive loop.
+  if (data.user.screen_name.match(/requestkittens/i) ) return false;
+
   emotion = findDesiredEmotion(data.text);
 
   getCatDataFromAPI(emotion)
@@ -38,8 +50,16 @@ function tweetUser(data) {
 
 // Step 1: Figure out which emotion they want.
 function findDesiredEmotion(tweetBody) {
-  // Fake it for now, out of laziness.
-  return "sleepy";
+  // Do we have a list of valid emotions? If not, go fetch one from the API.
+  if ( !validEmotions ) {
+    populateValidEmotions()
+    .then(function() {
+
+    })
+  }
+  return _.find(tweetBody.split(" "), function(word) {
+    return 
+  });
 }
 
 
@@ -47,7 +67,7 @@ function findDesiredEmotion(tweetBody) {
 function getCatDataFromAPI(emotion) {
   return new Promise(function(resolve, reject) {
     request.get(
-      API_INDEX,
+      API_ENDPOINTS.cats.index,
       {
         qs: {
           emotion: emotion
@@ -124,11 +144,30 @@ function replyToUser(mediaId, tweetId, user, emotion) {
   });
 };
 
+function populateValidEmotions() {
+  return new Promise(function(resolve, reject) {
+    request.get(
+      API_ENDPOINTS.emotions.index,
+      {
+        headers: {
+          Authorization: envar("REQUESTKITTENS_API_KEY")
+        },
+        json: true
+      }, 
+      function(err, res, body) {
+        if (err || res.statusCode !== 200) return reject(err);
+
+        validEmotions = body._items.map(function(item) { return item.name; });
+        console.log(validEmotions);
+        validEmotions.length ? resolve(true) : reject("No emotions found from server");
+      }
+    );
+  });
+}
 
 
 
-
-
+populateValidEmotions();
 
 
 
@@ -150,7 +189,7 @@ client.stream('statuses/filter', {track:'requestkittens'}, function(stream) {
 });
 
 
-//////////////// TEST 1: SKIP EVERYTHING BEFORE TweetUser ///////////////
+//////////////// TEST 1: Use this sample data ///////////.///////////////
 // JUST A TEST: Skipping the original twitter stream bit for now.
 // var sampleData = {
 //   id_str: "594625609063620608",
