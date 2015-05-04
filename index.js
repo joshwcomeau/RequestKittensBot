@@ -9,15 +9,23 @@ var twitter   = require('twitter');
 var Promise   = require('es6-promise').Promise;
 var request   = require('request');
 
+var LOGGING   = false; // A lot of console.logs will be based on this boolean constant.
 var BOT_USERNAME  = "requestkittens"; 
+var API_KEY       = envar("REQUESTKITTENS_API_KEY");
 var API_ENDPOINTS = {
   cats: {
-    index: 'http://requestkittens.com/cats'
+    index:      'http://requestkittens.com/cats'
   },
   emotions: {
-    index: 'http://requestkittens.com/emotions'
+    index:      'http://requestkittens.com/emotions'
+  },
+  twitter: {
+    postTweet:  'statuses/update',
+    postMedia:  'media/upload'
   }
 };
+
+
 
 var validEmotions;
 
@@ -32,56 +40,49 @@ var client = new twitter({
 
 // Putting this first, as a table-of-contents. Yay hoisting!
 function tweetUser(data) {
+  if (LOGGING) console.log("tweetUser called with data", data);
+
   var emotion;
 
   findDesiredEmotion(data.text)
-  .then(function(e)         { emotion = e; return getCatDataFromAPI(emotion); })
-  .then(function(catData)   { return fetchPhoto(catData); })
-  .then(function(photoData) { return uploadPhotoToTwitter(photoData); })
-  .then(function(mediaId)   { return replyToUser(mediaId, data.id_str, data.user, emotion); })
-  .then(function(result)    {
-    console.log("Everything complete!", result);
+  .then(function getCatData(emo)        { emotion = emo; return getCatDataFromAPI(emotion); })
+  .then(function grabPhoto(catData)     { return fetchPhoto(catData); })
+  .then(function uploadPhoto(photoData) { return uploadPhotoToTwitter(photoData); })
+  .then(function tweetReply(mediaId)    { return replyToUser(mediaId, data.id_str, data.user, emotion); })
+  .then(function allDone(result) {
+    if (LOGGING) console.log("Tweet posted:", result);
   }, function(err) {
+    if (LOGGING) console.log("Failure in the promise chain:", err);
+
     if (err.type === "no_emotion_found") {
-      replyWithNoEmotionFound(data.id_str, data.user);
-    } else {
-      console.log("Something broke:", err);  
-    }
+      replyWithNoEmotionFound(data.id_str, data.user)
+      .then(function(tweet) {
+        if (LOGGING) console.log("Successfully posted a tweet after no_emotion_found error:", tweet);
+      }, function(err) {
+        if (LOGGING) console.log("Could not post tweet after no_emotion_found, error:", err)
+      });
+    } 
     
   });
 }
 
-function replyWithNoEmotionFound(tweetId, user) {
-  var newStatus;
-
-  newStatus   = "@" 
-              + user.screen_name 
-              + ", please use one of the emotions I recognize: \n\n" 
-              + validEmotions.join(", ") 
-              + ".";
-
-  responseObj = {
-    status:                 newStatus, 
-    in_reply_to_status_id:  tweetId,
-  };
-
-
-  client.post('statuses/update', responseObj, function(error, tweet, response){
-    console.log( error ? util.inspect(error) : "\n\n\n\n\nTweet posted: ", tweet);
-  });
-}
 
 // Step 1: Figure out which emotion they want.
 function findDesiredEmotion(tweetBody) {
+  if (LOGGING) console.log("findDesiredEmotion called with tweet body", tweetBody);
+
   return new Promise(function(resolve, reject) {
-    var word = _.find(tweetBody.split(" "), function(word) {
+    var emotion = _.find(tweetBody.split(" "), function(word) {
       // Our server only deals in all-lowercase emotions.
       // Let's ensure the tweet follows the same convention
       word = word.toLowerCase();
+
       return validEmotions.indexOf(word) !== -1;
     });  
-
-    word ? resolve(word) : reject({ type: "no_emotion_found" });
+    
+    if (LOGGING) console.log("findDesiredEmotion found the emotion:", emotion);
+    
+    emotion ? resolve(emotion) : reject({ type: "no_emotion_found" });
   });
   
 }
@@ -89,6 +90,8 @@ function findDesiredEmotion(tweetBody) {
 
 // Step 2: Make a request to the RequestKittens.com API for a Cat JSON object.
 function getCatDataFromAPI(emotion) {
+  if (LOGGING) console.log("getCatDataFromAPI called with emotion", emotion);
+
   return new Promise(function(resolve, reject) {
     request.get(
       API_ENDPOINTS.cats.index,
@@ -97,12 +100,12 @@ function getCatDataFromAPI(emotion) {
           emotion: emotion
         },
         headers: {
-          Authorization: envar("REQUESTKITTENS_API_KEY")
+          Authorization: API_KEY
         },
         json: true
       }, 
       function(err, res, body) {
-        console.log("Got cat photo? status:", res.statusCode);
+        if (LOGGING) console.log("getCatDataFromAPI returned with body", body);
         (err || res.statusCode !== 200) ? reject(err) : resolve(body._items[0]);
       }
     );
@@ -136,7 +139,7 @@ function fetchPhoto(catData) {
 function uploadPhotoToTwitter(photoData) {
   return new Promise(function(resolve, reject) {
     client.post(
-      'media/upload', 
+      API_ENDPOINTS.twitter.postMedia, 
       { 
         media_data: photoData
       }, 
@@ -150,6 +153,8 @@ function uploadPhotoToTwitter(photoData) {
 
 // Step 5: Take all the data we've accrued, and use it to build and send a reply to the user.
 function replyToUser(mediaId, tweetId, user, emotion) {
+  if (LOGGING) console.log("replyToUser called with arguments", arguments);
+
   return new Promise(function(resolve, reject) {
     var newStatus, responseObj;
 
@@ -161,12 +166,45 @@ function replyToUser(mediaId, tweetId, user, emotion) {
       in_reply_to_status_id:  tweetId,
     };
 
-
-    client.post('statuses/update', responseObj, function(error, tweet, response){
-      console.log( error ? util.inspect(error) : "\n\n\n\n\nTweet posted: ", tweet);
-    });
+    sendTweet(responseObj, resolve, reject);
+    
   });
-};
+}
+
+// Convenience Method 1: Use a response object to send a tweet and resolve a parent promise
+function sendTweet(response, resolve, reject) {
+  if (LOGGING) console.log("sendTweet called with response object", response)
+  client.post(API_ENDPOINTS.twitter.postTweet, response, function(err, tweet, response){
+    if (LOGGING && err) console.log("sendTweet failed with error", err);
+    err 
+    ? reject({ type: "failed_to_post_tweet", msg: err })
+    : resolve(tweet);
+  });  
+}
+
+
+// Error Handler 1: User didn't supply a valid emotion
+function replyWithNoEmotionFound(tweetId, user) {
+  var newStatus;
+
+  if (LOGGING) console.log("replyWithNoEmotionFound called.");
+  
+  return new Promise(function(resolve, reject) {
+    newStatus   = "@" 
+                + user.screen_name 
+                + ", please use one of the emotions I recognize: \n\n" 
+                + validEmotions.join(", ") 
+                + ".";
+
+    responseObj = {
+      status:                 newStatus, 
+      in_reply_to_status_id:  tweetId,
+    };
+
+    sendTweet(responseObj, resolve, reject);
+  });
+}
+
 
 
 // Called on initialization to populate a list of valid emotions.
@@ -176,7 +214,7 @@ function fetchValidEmotions() {
       API_ENDPOINTS.emotions.index,
       {
         headers: {
-          Authorization: envar("REQUESTKITTENS_API_KEY")
+          Authorization: API_KEY
         },
         json: true
       }, 
