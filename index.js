@@ -69,17 +69,19 @@ function tweetUser(data) {
 
 // Step 1: Figure out which emotion they want.
 function findDesiredEmotion(tweetBody) {
+  var regex;
   if (LOGGING) console.log("findDesiredEmotion called with tweet body", tweetBody);
 
   return new Promise(function(resolve, reject) {
-    var emotion = _.find(tweetBody.split(" "), function(word) {
-      // Our server only deals in all-lowercase emotions.
-      // Let's ensure the tweet follows the same convention
-      word = word.toLowerCase();
+    // Formally, I was splitting the tweet body by word, and comparing each word
+    // to the 7 emotions.
+    // Instead, I want to do an insensitive match on the entire tweetBody, 7 times.
 
-      return validEmotions.indexOf(word) !== -1;
-    });  
-    
+    var emotion = _.find(validEmotions, function(emo) {
+      regex = new RegExp(emo, 'i'); // eg. /angry/i
+      return tweetBody.match(regex);
+    });
+
     if (LOGGING) console.log("findDesiredEmotion found the emotion:", emotion);
     
     emotion ? resolve(emotion) : reject({ type: "no_emotion_found" });
